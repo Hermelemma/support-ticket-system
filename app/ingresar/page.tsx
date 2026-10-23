@@ -47,7 +47,7 @@ export default async function LoginPage() {
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            Contraseña para todas: <code>demo1234</code>
+            Contraseña para todas: <code>cafe con leche y pan dulce</code>
           </p>
         </div>
       </div>
