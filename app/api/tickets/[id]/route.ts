@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server"
-import { withAuth, json, error } from "@/lib/api/respond"
+import { withAuth, json, error, fromError } from "@/lib/api/respond"
 import { getTicketDetail, updateStatus, updatePriority, assignTicket } from "@/lib/services/tickets"
 import { PRIORITIES, STATUSES } from "@/lib/types"
 
@@ -28,15 +28,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!PRIORITIES.includes(body.priority)) return error("Prioridad inválida")
       ticket = await updatePriority(auth.user, id, body.priority)
     } else if (body.assigneeId !== undefined) {
-      ticket = await assignTicket(auth.user, id, body.assigneeId)
+      ticket = await assignTicket(auth.user, id, body.assigneeId ? String(body.assigneeId) : null)
     } else {
       return error("Nada que actualizar")
     }
     return json({ ticket })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Error"
-    if (msg === "FORBIDDEN") return error("No autorizado", 403)
-    if (msg === "NOT_FOUND") return error("Ticket no encontrado", 404)
-    return error(msg, 400)
+    return fromError(e)
   }
 }
