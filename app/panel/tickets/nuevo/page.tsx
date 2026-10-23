@@ -1,14 +1,14 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { requireUserOrRedirect } from "@/lib/auth/session"
-import { listUsers } from "@/lib/services/users"
+import { listActiveClients } from "@/lib/services/users"
 import { NewTicketForm } from "@/components/tickets/new-ticket-form"
 import { Card } from "@/components/ui/card"
 
 export default async function NewTicketPage() {
   const user = await requireUserOrRedirect()
   const canManage = user.role === "agente" || user.role === "admin"
-  const clients = canManage ? (await listUsers()).filter((u) => u.role === "cliente") : []
+  const clients = canManage ? await listActiveClients() : []
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
