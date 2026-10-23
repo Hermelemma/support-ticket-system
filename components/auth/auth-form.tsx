@@ -1,10 +1,12 @@
 "use client"
 
-import { useActionState } from "react"
+import { startTransition, useActionState } from "react"
 import Link from "next/link"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input, Label } from "@/components/ui/field"
+import { PasswordInput } from "@/components/ui/password-input"
+import { PASSWORD_HINT } from "@/lib/security/password-policy"
 import { loginAction, registerAction, type ActionState } from "@/lib/actions/auth"
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -12,7 +14,15 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(action, undefined)
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form
+      className="flex flex-col gap-4"
+      // Envío manual: así React no borra lo escrito si el servidor devuelve un error.
+      onSubmit={(e) => {
+        e.preventDefault()
+        const data = new FormData(e.currentTarget)
+        startTransition(() => formAction(data))
+      }}
+    >
       {mode === "register" && (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name">Nombre completo</Label>
@@ -25,14 +35,19 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">Contraseña</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
-          placeholder="••••••••"
+          placeholder={mode === "login" ? "••••••••" : "Ej. mi gato duerme en la ventana"}
           required
           autoComplete={mode === "login" ? "current-password" : "new-password"}
+          aria-describedby={mode === "register" ? "password-hint" : undefined}
         />
+        {mode === "register" && (
+          <p id="password-hint" className="text-xs text-muted-foreground">
+            {PASSWORD_HINT}
+          </p>
+        )}
       </div>
 
       {state?.error && (
