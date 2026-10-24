@@ -1,6 +1,6 @@
 "use client"
 
-import { useTransition } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Select } from "@/components/ui/field"
 import {
@@ -12,7 +12,12 @@ import {
   type Status,
   type PublicUser,
 } from "@/lib/types"
-import { updateStatusAction, updatePriorityAction, assignTicketAction } from "@/lib/actions/tickets"
+import {
+  updateStatusAction,
+  updatePriorityAction,
+  assignTicketAction,
+  type ActionResult,
+} from "@/lib/actions/tickets"
 
 interface Props {
   ticketId: string
@@ -24,11 +29,22 @@ interface Props {
 
 export function TicketControls({ ticketId, status, priority, assigneeId, agents }: Props) {
   const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
-  function run(fn: () => Promise<void>) {
+  // Si el agente asignado ya no aparece en la lista (p. ej. fue desactivado),
+  // se muestra igualmente para no aparentar que el ticket está "Sin asignar".
+  const assigneeMissing = assigneeId !== null && !agents.some((a) => a.id === assigneeId)
+
+  function run(fn: () => Promise<ActionResult>) {
+    setError(null)
     startTransition(async () => {
-      await fn()
+      try {
+        const result = await fn()
+        if (result?.error) setError(result.error)
+      } catch {
+        setError("No se pudo guardar el cambio. Revisa tu conexión e inténtalo de nuevo.")
+      }
       router.refresh()
     })
   }
@@ -73,6 +89,11 @@ export function TicketControls({ ticketId, status, priority, assigneeId, agents 
           onChange={(e) => run(() => assignTicketAction(ticketId, e.target.value || null))}
         >
           <option value="">Sin asignar</option>
+          {assigneeMissing && (
+            <option value={assigneeId ?? ""} disabled>
+              Agente inactivo
+            </option>
+          )}
           {agents.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
@@ -80,6 +101,12 @@ export function TicketControls({ ticketId, status, priority, assigneeId, agents 
           ))}
         </Select>
       </div>
+
+      {error && (
+        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

@@ -25,6 +25,11 @@ const NAV: NavItem[] = [
 export function Sidebar({ role }: { role: Role }) {
   const pathname = usePathname()
   const items = NAV.filter((i) => i.roles.includes(role))
+  // Se resalta solo la opción cuya ruta coincide de forma más específica
+  // (así "Nuevo ticket" no resalta también "Tickets").
+  const activeHref = items
+    .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
@@ -36,7 +41,7 @@ export function Sidebar({ role }: { role: Role }) {
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {items.map((item) => {
-          const active = pathname === item.href || (item.href !== "/panel" && pathname.startsWith(item.href))
+          const active = item.href === activeHref
           const Icon = item.icon
           return (
             <Link

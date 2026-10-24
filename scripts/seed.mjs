@@ -3,9 +3,12 @@ import { randomUUID, randomBytes, scryptSync } from "node:crypto"
 
 const sql = neon(process.env.DATABASE_URL)
 
+// Contraseña de las cuentas demo: frase de 26 caracteres conforme a NIST SP 800-63B-4.
+export const DEMO_PASSWORD = "cafe con leche y pan dulce"
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex")
-  const hash = scryptSync(password, salt, 64).toString("hex")
+  const hash = scryptSync(password.normalize("NFC"), salt, 64).toString("hex")
   return { hash, salt }
 }
 
@@ -14,7 +17,7 @@ const daysAgo = (d) => new Date(now - d * 86_400_000).toISOString()
 const hoursAgo = (h) => new Date(now - h * 3_600_000).toISOString()
 
 function mkUser(name, email, role) {
-  const { hash, salt } = hashPassword("demo1234")
+  const { hash, salt } = hashPassword(DEMO_PASSWORD)
   return { id: randomUUID(), name, email, role, passwordHash: hash, salt, createdAt: daysAgo(120) }
 }
 

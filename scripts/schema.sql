@@ -9,8 +9,15 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash text NOT NULL,
   salt          text NOT NULL,
   active        boolean NOT NULL DEFAULT true,
-  created_at    timestamptz NOT NULL DEFAULT now()
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  -- Límite de intentos fallidos de inicio de sesión (NIST SP 800-63B-4 §3.2.2)
+  failed_logins        integer NOT NULL DEFAULT 0,
+  last_failed_login_at timestamptz
 );
+
+-- Migración para bases creadas con una versión anterior del esquema.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_logins integer NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_failed_login_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS tickets (
   id           text PRIMARY KEY,

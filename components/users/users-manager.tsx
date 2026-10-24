@@ -1,11 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { useActionState } from "react"
+import { startTransition, useActionState } from "react"
 import { UserPlus, Pencil, ShieldCheck, ShieldOff, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Field, Label, Input, Select } from "@/components/ui/field"
+import { PasswordInput } from "@/components/ui/password-input"
+import { PASSWORD_HINT } from "@/lib/security/password-policy"
 import { cn } from "@/lib/utils"
 import { ROLE_LABEL, ROLES, type PublicUser } from "@/lib/types"
 import {
@@ -143,20 +145,29 @@ export function UsersManager({
 }
 
 function ActiveToggle({ user, disabled }: { user: UserRow; disabled: boolean }) {
-  const [pending, startTransition] = React.useTransition()
+  const [pending, startToggle] = React.useTransition()
+  const [error, setError] = React.useState<string | null>(null)
 
   function toggle() {
-    startTransition(async () => {
+    setError(null)
+    startToggle(async () => {
       try {
-        await toggleUserActiveAction(user.id, !user.active)
+        const result = await toggleUserActiveAction(user.id, !user.active)
+        if (result?.error) setError(result.error)
       } catch {
-        /* la revalidación devuelve el estado real */
+        setError("No se pudo cambiar el estado. Inténtalo de nuevo.")
       }
     })
   }
 
   return (
-    <Button
+    <>
+      {error && (
+        <span role="alert" className="mr-1 max-w-40 text-right text-xs text-destructive">
+          {error}
+        </span>
+      )}
+      <Button
       variant="ghost"
       size="icon-sm"
       disabled={disabled || pending}
@@ -172,6 +183,7 @@ function ActiveToggle({ user, disabled }: { user: UserRow; disabled: boolean }) 
         <ShieldCheck className="size-4 text-chart-2" />
       )}
     </Button>
+    </>
   )
 }
 
@@ -220,7 +232,15 @@ function UserDialog({
           </Button>
         </div>
 
-        <form action={formAction} className="space-y-4">
+        <form
+          className="space-y-4"
+          // Envío manual: evita que React vacíe el formulario si hay un error.
+          onSubmit={(e) => {
+            e.preventDefault()
+            const data = new FormData(e.currentTarget)
+            startTransition(() => formAction(data))
+          }}
+        >
           {user && <input type="hidden" name="id" value={user.id} />}
 
           <Field>
@@ -256,13 +276,17 @@ function UserDialog({
               {user ? "Nueva contraseña" : "Contraseña"}
               {user && <span className="ml-1 font-normal text-muted-foreground">(opcional)</span>}
             </Label>
-            <Input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
-              placeholder={user ? "Dejar en blanco para no cambiar" : "Mínimo 6 caracteres"}
+              placeholder={user ? "Dejar en blanco para no cambiar" : "Mínimo 15 caracteres"}
               autoComplete="new-password"
+              required={!user}
+              aria-describedby="password-hint"
             />
+            <p id="password-hint" className="text-xs text-muted-foreground">
+              {PASSWORD_HINT}
+            </p>
           </Field>
 
           {state?.error && (

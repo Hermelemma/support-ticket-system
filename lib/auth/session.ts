@@ -3,10 +3,20 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { sql, rowToUser, randomUUID } from "@/lib/db/sql"
 import { hashPassword, verifyPassword, signSession, verifySession } from "@/lib/crypto"
+import { validatePassword } from "@/lib/security/password-policy"
 import type { PublicUser, Role, User } from "@/lib/types"
 
 const COOKIE_NAME = "ticket_session"
 const MAX_AGE = 60 * 60 * 24 * 7 // 7 días
+
+/**
+ * Límite de intentos fallidos (NIST SP 800-63B-4 §3.2.2): como máximo 100
+ * intentos fallidos consecutivos antes de bloquear la cuenta. Además, a partir
+ * de THROTTLE_AFTER fallos se exige una espera entre intentos.
+ */
+export const MAX_FAILED_LOGINS = 100
+const THROTTLE_AFTER = 5
+const THROTTLE_SECONDS = 30
 
 function toPublic(u: User): PublicUser {
   const { passwordHash, salt, ...rest } = u
@@ -65,11 +75,40 @@ export type AuthResult = { ok: true; user: PublicUser } | { ok: false; error: st
 /** Inicia sesión validando credenciales y establece la cookie firmada. */
 export async function login(email: string, password: string): Promise<AuthResult> {
   const user = await findByEmail(email)
-  if (!user || !verifyPassword(password, user.passwordHash, user.salt)) {
+  if (!user) {
+    return { ok: false, error: "Correo o contraseña incorrectos." }
+  }
+
+  const [attempts] = (await sql`
+    SELECT failed_logins, last_failed_login_at FROM users WHERE id = ${user.id}
+  `) as { failed_logins: number; last_failed_login_at: string | Date | null }[]
+  const failed = Number(attempts?.failed_logins ?? 0)
+
+  if (failed >= MAX_FAILED_LOGINS) {
+    return {
+      ok: false,
+      error: "Tu cuenta se bloqueó por demasiados intentos fallidos. Pide al administrador que restablezca tu contraseña.",
+    }
+  }
+  if (failed >= THROTTLE_AFTER && attempts?.last_failed_login_at) {
+    const elapsed = (Date.now() - new Date(attempts.last_failed_login_at).getTime()) / 1000
+    if (elapsed < THROTTLE_SECONDS) {
+      const wait = Math.ceil(THROTTLE_SECONDS - elapsed)
+      return { ok: false, error: `Demasiados intentos fallidos. Espera ${wait} segundos e inténtalo de nuevo.` }
+    }
+  }
+
+  if (!verifyPassword(password, user.passwordHash, user.salt)) {
+    await sql`
+      UPDATE users SET failed_logins = failed_logins + 1, last_failed_login_at = now() WHERE id = ${user.id}
+    `
     return { ok: false, error: "Correo o contraseña incorrectos." }
   }
   if (!user.active) {
     return { ok: false, error: "Tu cuenta está desactivada. Contacta al administrador." }
+  }
+  if (failed > 0) {
+    await sql`UPDATE users SET failed_logins = 0, last_failed_login_at = NULL WHERE id = ${user.id}`
   }
   await setSessionCookie(user.id)
   return { ok: true, user: toPublic(user) }
@@ -77,19 +116,30 @@ export async function login(email: string, password: string): Promise<AuthResult
 
 /** Registra un nuevo usuario (rol cliente por defecto) e inicia sesión. */
 export async function register(name: string, email: string, password: string, role: Role = "cliente"): Promise<AuthResult> {
+  const cleanName = name.trim()
   const normalized = email.trim().toLowerCase()
+  if (!cleanName) {
+    return { ok: false, error: "Escribe tu nombre completo." }
+  }
+  if (cleanName.length > 100) {
+    return { ok: false, error: "El nombre no puede superar 100 caracteres." }
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    return { ok: false, error: "El correo no tiene un formato válido." }
+  }
+  const passwordError = validatePassword(password, { email: normalized, name: cleanName })
+  if (passwordError) {
+    return { ok: false, error: passwordError }
+  }
   const existing = await findByEmail(normalized)
   if (existing) {
     return { ok: false, error: "Ya existe una cuenta con ese correo." }
-  }
-  if (password.length < 6) {
-    return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." }
   }
   const { hash, salt } = hashPassword(password)
   const id = randomUUID()
   await sql`
     INSERT INTO users (id, name, email, role, password_hash, salt, active)
-    VALUES (${id}, ${name.trim()}, ${normalized}, ${role}, ${hash}, ${salt}, true)
+    VALUES (${id}, ${cleanName}, ${normalized}, ${role}, ${hash}, ${salt}, true)
   `
   await setSessionCookie(id)
   const user = await findById(id)

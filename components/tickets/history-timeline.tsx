@@ -33,13 +33,17 @@ function describe(ev: HistoryView): string {
     case "creado":
       return `${actor} creó el ticket`
     case "estado":
-      return `${actor} cambió el estado a "${STATUS_LABEL[ev.to as Status] ?? ev.to}"`
+      return ev.note === "Cambio automático al asignar un agente"
+        ? `El estado cambió automáticamente a "${STATUS_LABEL[ev.to as Status] ?? ev.to}" al asignar el ticket`
+        : `${actor} cambió el estado a "${STATUS_LABEL[ev.to as Status] ?? ev.to}"`
     case "reabierto":
       return `${actor} reabrió el ticket (${STATUS_LABEL[ev.to as Status] ?? ev.to})`
     case "prioridad":
       return `${actor} cambió la prioridad a "${PRIORITY_LABEL[ev.to as Priority] ?? ev.to}"`
     case "asignacion":
-      return ev.to ? `${actor} asignó el ticket a un agente` : `${actor} quitó la asignación`
+      return ev.to
+        ? `${actor} asignó el ticket a ${ev.target?.name ?? "un agente"}`
+        : `${actor} quitó la asignación`
     case "comentario":
       return ev.note === "Nota interna" ? `${actor} añadió una nota interna` : `${actor} comentó`
     case "categoria":

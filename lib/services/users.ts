@@ -23,6 +23,14 @@ export async function listAgents(): Promise<PublicUser[]> {
   return rows.map((r) => toPublic(rowToUser(r)))
 }
 
+/** Clientes activos (para elegir solicitante al crear un ticket). */
+export async function listActiveClients(): Promise<PublicUser[]> {
+  const rows = (await sql`
+    SELECT * FROM users WHERE role = 'cliente' AND active = true ORDER BY name ASC
+  `) as Record<string, unknown>[]
+  return rows.map((r) => toPublic(rowToUser(r)))
+}
+
 export async function listUsers(role?: Role): Promise<PublicUser[]> {
   const rows = (
     role
@@ -84,7 +92,9 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Pu
           email = ${input.email.trim().toLowerCase()},
           role = ${input.role},
           password_hash = ${hash},
-          salt = ${salt}
+          salt = ${salt},
+          failed_logins = 0,
+          last_failed_login_at = NULL
       WHERE id = ${id}
       RETURNING *
     `) as Record<string, unknown>[]
@@ -103,7 +113,11 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Pu
 
 export async function setUserActive(id: string, active: boolean): Promise<PublicUser> {
   const rows = (await sql`
-    UPDATE users SET active = ${active} WHERE id = ${id} RETURNING *
+    UPDATE users
+    SET active = ${active},
+        failed_logins = CASE WHEN ${active}::boolean THEN 0 ELSE failed_logins END
+    WHERE id = ${id}
+    RETURNING *
   `) as Record<string, unknown>[]
   return toPublic(rowToUser(rows[0]))
 }

@@ -18,11 +18,16 @@ const NAV = [
 export function MobileNav({ role }: { role: Role }) {
   const pathname = usePathname()
   const items = NAV.filter((i) => i.roles.includes(role))
+  // Se resalta solo la opción cuya ruta coincide de forma más específica
+  // (así "Nuevo ticket" no resalta también "Tickets").
+  const activeHref = items
+    .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-card/95 backdrop-blur md:hidden">
       {items.map((item) => {
-        const active = pathname === item.href || (item.href !== "/panel" && pathname.startsWith(item.href))
+        const active = item.href === activeHref
         const Icon = item.icon
         return (
           <Link

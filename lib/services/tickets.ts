@@ -9,8 +9,9 @@ import type {
   Status,
   Ticket,
 } from "@/lib/types"
-import { PRIORITY_WEIGHT } from "@/lib/types"
-import { userMap } from "@/lib/services/users"
+import { PRIORITY_WEIGHT, CATEGORIES, CHANNELS, PRIORITIES, STATUSES } from "@/lib/types"
+import { userMap, getUserById } from "@/lib/services/users"
+import { dayKey, dayLabel } from "@/lib/format"
 
 type Row = Record<string, unknown>
 
@@ -28,7 +29,27 @@ export interface CommentView extends Comment {
 
 export interface HistoryView extends HistoryEvent {
   actor: PublicUser | null
+  /** Para eventos de asignación: el agente asignado (si existe). */
+  target: PublicUser | null
 }
+
+/**
+ * Error de validación del dominio. El mensaje es seguro para mostrar al usuario
+ * (a diferencia de los errores internos de la base de datos).
+ */
+export class TicketError extends Error {
+  constructor(
+    public code: "FORBIDDEN" | "NOT_FOUND" | "INVALID",
+    message: string,
+  ) {
+    super(message)
+    this.name = "TicketError"
+  }
+}
+
+export const TITLE_MAX = 120
+export const DESCRIPTION_MAX = 5000
+export const COMMENT_MAX = 5000
 
 export interface TicketDetail {
   ticket: Ticket
@@ -148,10 +169,15 @@ export async function getTicketDetail(viewer: PublicUser, id: string): Promise<T
   const historyRows = (await sql`
     SELECT * FROM history WHERE ticket_id = ${ticket.id} ORDER BY created_at ASC
   `) as Row[]
-  const history: HistoryView[] = historyRows.map(rowToHistory).map((h) => ({
-    ...h,
-    actor: users.get(h.actorId) ?? null,
-  }))
+  const history: HistoryView[] = historyRows
+    .map(rowToHistory)
+    // los clientes tampoco ven en el historial que se agregó una nota interna
+    .filter((h) => manage || !(h.type === "comentario" && h.note === "Nota interna"))
+    .map((h) => ({
+      ...h,
+      actor: users.get(h.actorId) ?? null,
+      target: h.type === "asignacion" && h.to ? (users.get(h.to) ?? null) : null,
+    }))
 
   return {
     ticket,
@@ -174,13 +200,39 @@ export interface CreateTicketInput {
 }
 
 export async function createTicket(viewer: PublicUser, input: CreateTicketInput): Promise<Ticket> {
-  const requesterId = canManage(viewer) && input.requesterId ? input.requesterId : viewer.id
+  const title = String(input.title ?? "").trim()
+  const description = String(input.description ?? "").trim()
+  const category = String(input.category ?? "").trim()
+  if (!title || !description || !category) {
+    throw new TicketError("INVALID", "Completa título, descripción y categoría.")
+  }
+  if (Array.from(title).length > TITLE_MAX) {
+    throw new TicketError("INVALID", `El título no puede superar ${TITLE_MAX} caracteres.`)
+  }
+  if (Array.from(description).length > DESCRIPTION_MAX) {
+    throw new TicketError("INVALID", `La descripción no puede superar ${DESCRIPTION_MAX} caracteres.`)
+  }
+  if (!CATEGORIES.includes(category)) throw new TicketError("INVALID", "Categoría no válida.")
+  if (!CHANNELS.includes(input.channel)) throw new TicketError("INVALID", "Canal no válido.")
+  if (!PRIORITIES.includes(input.priority)) throw new TicketError("INVALID", "Prioridad no válida.")
+
+  let requesterId = viewer.id
+  if (canManage(viewer) && input.requesterId) {
+    // Solo se puede crear a nombre de un cliente activo que exista.
+    const requester = await getUserById(input.requesterId)
+    if (!requester || !requester.active || requester.role !== "cliente") {
+      throw new TicketError("INVALID", "El solicitante seleccionado no es un cliente activo.")
+    }
+    requesterId = requester.id
+  }
+
+  // El código se reserva solo después de validar todo, para no dejar huecos.
   const id = randomUUID()
   const code = await nextTicketCode()
   const rows = (await sql`
     INSERT INTO tickets (id, code, title, description, category, channel, priority, status, requester_id, assignee_id)
     VALUES (
-      ${id}, ${code}, ${input.title.trim()}, ${input.description.trim()}, ${input.category},
+      ${id}, ${code}, ${title}, ${description}, ${category},
       ${input.channel}, ${input.priority}, 'abierto', ${requesterId}, NULL
     )
     RETURNING *
@@ -196,6 +248,7 @@ export async function createTicket(viewer: PublicUser, input: CreateTicketInput)
 }
 
 export async function updateStatus(viewer: PublicUser, id: string, status: Status, note?: string): Promise<Ticket> {
+  if (!STATUSES.includes(status)) throw new TicketError("INVALID", "Estado no válido.")
   const t = await requireManageableTicket(viewer, id)
   if (t.status === status) return t
   const from = t.status
@@ -210,12 +263,13 @@ export async function updateStatus(viewer: PublicUser, id: string, status: Statu
     type: reopened ? "reabierto" : "estado",
     from,
     to: status,
-    note: note ?? null,
+    note: note ? String(note).slice(0, 500) : null,
   })
   return rowToTicket(rows[0])
 }
 
 export async function updatePriority(viewer: PublicUser, id: string, priority: Priority): Promise<Ticket> {
+  if (!PRIORITIES.includes(priority)) throw new TicketError("INVALID", "Prioridad no válida.")
   const t = await requireManageableTicket(viewer, id)
   if (t.priority === priority) return t
   const from = t.priority
@@ -228,23 +282,45 @@ export async function updatePriority(viewer: PublicUser, id: string, priority: P
 
 export async function assignTicket(viewer: PublicUser, id: string, assigneeId: string | null): Promise<Ticket> {
   const t = await requireManageableTicket(viewer, id)
+  if (assigneeId) {
+    // Solo se puede asignar a agentes o administradores activos.
+    const agent = await getUserById(assigneeId)
+    if (!agent || !agent.active || (agent.role !== "agente" && agent.role !== "admin")) {
+      throw new TicketError("INVALID", "Solo se puede asignar a un agente o administrador activo.")
+    }
+  }
+  if ((assigneeId ?? null) === (t.assigneeId ?? null)) return t
   const from = t.assigneeId
-  const newStatus = assigneeId && t.status === "abierto" ? "en_progreso" : t.status
+  const newStatus: Status = assigneeId && t.status === "abierto" ? "en_progreso" : t.status
   const rows = (await sql`
     UPDATE tickets SET assignee_id = ${assigneeId}, status = ${newStatus}, updated_at = now()
     WHERE id = ${t.id} RETURNING *
   `) as Row[]
   await addHistory(t.id, viewer.id, { type: "asignacion", from, to: assigneeId, note: null })
+  if (newStatus !== t.status) {
+    // El cambio automático de estado también queda en el historial.
+    await addHistory(t.id, viewer.id, {
+      type: "estado",
+      from: t.status,
+      to: newStatus,
+      note: "Cambio automático al asignar un agente",
+    })
+  }
   return rowToTicket(rows[0])
 }
 
 export async function addComment(viewer: PublicUser, id: string, body: string, internal = false): Promise<Comment> {
+  const text = String(body ?? "").trim()
+  if (!text) throw new TicketError("INVALID", "El comentario no puede estar vacío.")
+  if (Array.from(text).length > COMMENT_MAX) {
+    throw new TicketError("INVALID", `El comentario no puede superar ${COMMENT_MAX} caracteres.`)
+  }
   const ticket = await findTicket(id)
-  if (!ticket || !canView(viewer, ticket)) throw new Error("NOT_FOUND")
+  if (!ticket || !canView(viewer, ticket)) throw new TicketError("NOT_FOUND", "Ticket no encontrado")
   const isInternal = canManage(viewer) ? internal : false // clientes no crean notas internas
   const rows = (await sql`
     INSERT INTO comments (id, ticket_id, author_id, body, internal)
-    VALUES (${randomUUID()}, ${ticket.id}, ${viewer.id}, ${body.trim()}, ${isInternal})
+    VALUES (${randomUUID()}, ${ticket.id}, ${viewer.id}, ${text}, ${isInternal})
     RETURNING *
   `) as Row[]
   await touch(ticket.id)
@@ -258,9 +334,9 @@ export async function addComment(viewer: PublicUser, id: string, body: string, i
 }
 
 async function requireManageableTicket(viewer: PublicUser, id: string): Promise<Ticket> {
-  if (viewer.role !== "agente" && viewer.role !== "admin") throw new Error("FORBIDDEN")
+  if (viewer.role !== "agente" && viewer.role !== "admin") throw new TicketError("FORBIDDEN", "No autorizado")
   const t = await findTicket(id)
-  if (!t) throw new Error("NOT_FOUND")
+  if (!t) throw new TicketError("NOT_FOUND", "Ticket no encontrado")
   return t
 }
 
@@ -280,7 +356,7 @@ export interface ReportData {
 }
 
 export async function getReports(viewer: PublicUser): Promise<ReportData> {
-  const { PRIORITY_LABEL, STATUS_LABEL, CHANNEL_LABEL, STATUSES, PRIORITIES, CHANNELS } = await import("@/lib/types")
+  const { PRIORITY_LABEL, STATUS_LABEL, CHANNEL_LABEL } = await import("@/lib/types")
 
   const ticketRows = (
     viewer.role === "cliente"
@@ -299,24 +375,17 @@ export async function getReports(viewer: PublicUser): Promise<ReportData> {
       now - new Date(t.updatedAt).getTime() < 7 * 86_400_000,
   ).length
 
-  // Tendencia últimos 7 días
+  // Tendencia últimos 7 días (días calendario en la zona horaria de la app)
   const tendencia: ReportData["tendencia"] = []
   for (let i = 6; i >= 0; i--) {
-    const dayStart = new Date(now - i * 86_400_000)
-    dayStart.setHours(0, 0, 0, 0)
-    const dayEnd = dayStart.getTime() + 86_400_000
-    const label = dayStart.toLocaleDateString("es", { day: "2-digit", month: "short" })
+    const day = new Date(now - i * 86_400_000)
+    const key = dayKey(day)
     tendencia.push({
-      fecha: label,
-      creados: tickets.filter((t) => {
-        const c = new Date(t.createdAt).getTime()
-        return c >= dayStart.getTime() && c < dayEnd
-      }).length,
-      resueltos: tickets.filter((t) => {
-        if (t.status !== "resuelto" && t.status !== "cerrado") return false
-        const c = new Date(t.updatedAt).getTime()
-        return c >= dayStart.getTime() && c < dayEnd
-      }).length,
+      fecha: dayLabel(day),
+      creados: tickets.filter((t) => dayKey(t.createdAt) === key).length,
+      resueltos: tickets.filter(
+        (t) => (t.status === "resuelto" || t.status === "cerrado") && dayKey(t.updatedAt) === key,
+      ).length,
     })
   }
 
@@ -358,6 +427,6 @@ export async function getReports(viewer: PublicUser): Promise<ReportData> {
     porCanal: count(CHANNELS, (t) => t.channel, CHANNEL_LABEL),
     porAgente,
     tendencia,
-    tiempoPromedioResolucionHoras: avg ? Math.round(avg * 10) / 10 : null,
+    tiempoPromedioResolucionHoras: avg !== null ? Math.round(avg * 10) / 10 : null,
   }
 }

@@ -9,10 +9,26 @@ import {
   updatePriority,
   assignTicket,
   addComment,
+  TicketError,
 } from "@/lib/services/tickets"
 import type { Channel, Priority, Status } from "@/lib/types"
 
 export type FormState = { error?: string; ok?: boolean } | undefined
+export type ActionResult = { error?: string }
+
+/** Convierte errores del dominio en mensajes seguros para la interfaz. */
+function toMessage(e: unknown): string {
+  if (e instanceof TicketError) return e.message
+  console.error("[tickets] error inesperado", e)
+  return "Ocurrió un error inesperado. Inténtalo de nuevo."
+}
+
+function revalidateTicket(id: string) {
+  revalidatePath("/panel/tickets/[id]", "page")
+  revalidatePath(`/panel/tickets/${id}`)
+  revalidatePath("/panel/tickets")
+  revalidatePath("/panel")
+}
 
 export async function createTicketAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireUser()
@@ -27,32 +43,49 @@ export async function createTicketAction(_prev: FormState, formData: FormData): 
     return { error: "Completa título, descripción y categoría." }
   }
 
-  const ticket = await createTicket(user, { title, description, category, channel, priority, requesterId })
+  let code: string
+  try {
+    const ticket = await createTicket(user, { title, description, category, channel, priority, requesterId })
+    code = ticket.code
+  } catch (e) {
+    return { error: toMessage(e) }
+  }
   revalidatePath("/panel/tickets")
   revalidatePath("/panel")
-  redirect(`/panel/tickets/${ticket.code}`)
+  redirect(`/panel/tickets/${code}`)
 }
 
-export async function updateStatusAction(id: string, status: Status, note?: string): Promise<void> {
+export async function updateStatusAction(id: string, status: Status, note?: string): Promise<ActionResult> {
   const user = await requireUser()
-  await updateStatus(user, id, status, note)
-  revalidatePath(`/panel/tickets/${id}`)
-  revalidatePath("/panel/tickets")
-  revalidatePath("/panel")
+  try {
+    await updateStatus(user, id, status, note)
+  } catch (e) {
+    return { error: toMessage(e) }
+  }
+  revalidateTicket(id)
+  return {}
 }
 
-export async function updatePriorityAction(id: string, priority: Priority): Promise<void> {
+export async function updatePriorityAction(id: string, priority: Priority): Promise<ActionResult> {
   const user = await requireUser()
-  await updatePriority(user, id, priority)
-  revalidatePath(`/panel/tickets/${id}`)
-  revalidatePath("/panel/tickets")
+  try {
+    await updatePriority(user, id, priority)
+  } catch (e) {
+    return { error: toMessage(e) }
+  }
+  revalidateTicket(id)
+  return {}
 }
 
-export async function assignTicketAction(id: string, assigneeId: string | null): Promise<void> {
+export async function assignTicketAction(id: string, assigneeId: string | null): Promise<ActionResult> {
   const user = await requireUser()
-  await assignTicket(user, id, assigneeId)
-  revalidatePath(`/panel/tickets/${id}`)
-  revalidatePath("/panel/tickets")
+  try {
+    await assignTicket(user, id, assigneeId)
+  } catch (e) {
+    return { error: toMessage(e) }
+  }
+  revalidateTicket(id)
+  return {}
 }
 
 export async function addCommentAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -61,7 +94,11 @@ export async function addCommentAction(_prev: FormState, formData: FormData): Pr
   const body = String(formData.get("body") ?? "").trim()
   const internal = formData.get("internal") === "on"
   if (!body) return { error: "El comentario no puede estar vacío." }
-  await addComment(user, id, body, internal)
-  revalidatePath(`/panel/tickets/${id}`)
+  try {
+    await addComment(user, id, body, internal)
+  } catch (e) {
+    return { error: toMessage(e) }
+  }
+  revalidateTicket(id)
   return { ok: true }
 }

@@ -166,7 +166,9 @@ function arquitectura(): (Paragraph | Table)[] {
     bullet("Registro de auditoría mediante eventos de historial inmutables."),
 
     h1("4. Seguridad"),
-    bullet("Contraseñas almacenadas con hash y salt (scrypt)."),
+    bullet("Contraseñas almacenadas con hash y salt (scrypt), normalizadas a Unicode NFC."),
+    bullet("Política de contraseñas NIST SP 800-63B-4: mínimo 15 caracteres, hasta 128, sin reglas de composición, lista de bloqueo de contraseñas comunes y del contexto, y sin caducidad periódica."),
+    bullet("Límite de intentos fallidos: espera de 30 s tras 5 fallos y bloqueo de la cuenta tras 100 fallos consecutivos."),
     bullet("Sesión mediante cookie httpOnly firmada con HMAC."),
     bullet("Autorización por rol verificada en el servidor en cada operación sensible."),
     bullet("Validación y saneamiento de entradas."),
@@ -270,9 +272,9 @@ function manualUsuario(): (Paragraph | Table)[] {
     table(
       ["Rol", "Correo", "Contraseña"],
       [
-        ["Administrador", "admin@soporte.dev", "demo1234"],
-        ["Agente", "bruno@soporte.dev", "demo1234"],
-        ["Cliente", "diego@empresa.com", "demo1234"],
+        ["Administrador", "admin@soporte.dev", "cafe con leche y pan dulce"],
+        ["Agente", "bruno@soporte.dev", "cafe con leche y pan dulce"],
+        ["Cliente", "diego@empresa.com", "cafe con leche y pan dulce"],
       ],
     ),
 

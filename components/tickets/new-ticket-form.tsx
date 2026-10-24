@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState } from "react"
+import { startTransition, useActionState } from "react"
 import { AlertCircle } from "lucide-react"
 import { createTicketAction, type FormState } from "@/lib/actions/tickets"
 import { Field, Label, Input, Textarea, Select } from "@/components/ui/field"
@@ -23,7 +23,16 @@ export function NewTicketForm({ canManage, clients }: Props) {
   const [state, action, pending] = useActionState<FormState, FormData>(createTicketAction, undefined)
 
   return (
-    <form action={action} className="space-y-5">
+    <form
+      className="space-y-5"
+      // Se envía manualmente para que React no vacíe el formulario cuando el
+      // servidor devuelve un error de validación (comportamiento de React 19).
+      onSubmit={(e) => {
+        e.preventDefault()
+        const data = new FormData(e.currentTarget)
+        startTransition(() => action(data))
+      }}
+    >
       {state?.error && (
         <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <AlertCircle className="size-4 shrink-0" />
@@ -34,6 +43,7 @@ export function NewTicketForm({ canManage, clients }: Props) {
       <Field>
         <Label htmlFor="title">Título</Label>
         <Input id="title" name="title" required placeholder="Resumen breve del problema" maxLength={120} />
+        <p className="text-xs text-muted-foreground">Máximo 120 caracteres.</p>
       </Field>
 
       <Field>

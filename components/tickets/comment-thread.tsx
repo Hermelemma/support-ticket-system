@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { startTransition, useActionState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Lock, Send } from "lucide-react"
 import { addCommentAction, type FormState } from "@/lib/actions/tickets"
@@ -76,7 +76,15 @@ export function CommentThread({ ticketId, comments, canManage, currentUserId }: 
         })}
       </div>
 
-      <form ref={formRef} action={action} className="space-y-2">
+      <form
+        ref={formRef}
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          const data = new FormData(e.currentTarget)
+          startTransition(() => action(data))
+        }}
+      >
         <input type="hidden" name="ticketId" value={ticketId} />
         <Textarea name="body" rows={3} required placeholder="Escribe una respuesta…" />
         {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
