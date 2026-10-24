@@ -167,7 +167,8 @@ function arquitectura(): (Paragraph | Table)[] {
 
     h1("4. Seguridad"),
     bullet("Contraseñas almacenadas con hash y salt (scrypt), normalizadas a Unicode NFC."),
-    bullet("Política de contraseñas NIST SP 800-63B-4: mínimo 15 caracteres, hasta 128, sin reglas de composición, lista de bloqueo de contraseñas comunes y del contexto, y sin caducidad periódica."),
+    bullet("Política de contraseñas NIST SP 800-63B-4: mínimo 15 caracteres, hasta 128, sin reglas de composición, lista de bloqueo de contraseñas comunes y del contexto, y sin caducidad periódica. Por política interna no se permiten espacios."),
+    bullet("Registro restringido a correos de los dominios @empresa.com y @soporte.dev."),
     bullet("Límite de intentos fallidos: espera de 30 s tras 5 fallos y bloqueo de la cuenta tras 100 fallos consecutivos."),
     bullet("Sesión mediante cookie httpOnly firmada con HMAC."),
     bullet("Autorización por rol verificada en el servidor en cada operación sensible."),
@@ -272,9 +273,9 @@ function manualUsuario(): (Paragraph | Table)[] {
     table(
       ["Rol", "Correo", "Contraseña"],
       [
-        ["Administrador", "admin@soporte.dev", "cafe con leche y pan dulce"],
-        ["Agente", "bruno@soporte.dev", "cafe con leche y pan dulce"],
-        ["Cliente", "diego@empresa.com", "cafe con leche y pan dulce"],
+        ["Administrador", "admin@soporte.dev", "CafeConLecheYPanDulce"],
+        ["Agente", "bruno@soporte.dev", "CafeConLecheYPanDulce"],
+        ["Cliente", "diego@empresa.com", "CafeConLecheYPanDulce"],
       ],
     ),
 

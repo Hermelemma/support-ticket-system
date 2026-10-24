@@ -11,14 +11,11 @@ import {
 } from "@/lib/services/users"
 import { ROLES, type Role } from "@/lib/types"
 import { validatePassword } from "@/lib/security/password-policy"
+import { validateEmail } from "@/lib/security/email-policy"
 
 export type UserFormState = { error?: string; ok?: boolean } | undefined
 
 export type ToggleResult = { error?: string }
-
-function validEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-}
 
 export async function createUserAction(_prev: UserFormState, formData: FormData): Promise<UserFormState> {
   await requireRole("admin")
@@ -29,7 +26,8 @@ export async function createUserAction(_prev: UserFormState, formData: FormData)
 
   if (!name || !email) return { error: "Nombre y correo son obligatorios." }
   if (name.length > 100) return { error: "El nombre no puede superar 100 caracteres." }
-  if (!validEmail(email)) return { error: "El correo no tiene un formato válido." }
+  const emailError = validateEmail(email)
+  if (emailError) return { error: emailError }
   if (!ROLES.includes(role)) return { error: "Rol no válido." }
   const passwordError = validatePassword(password, { email, name })
   if (passwordError) return { error: passwordError }
@@ -52,7 +50,8 @@ export async function updateUserAction(_prev: UserFormState, formData: FormData)
   if (!target) return { error: "Usuario no encontrado." }
   if (!name || !email) return { error: "Nombre y correo son obligatorios." }
   if (name.length > 100) return { error: "El nombre no puede superar 100 caracteres." }
-  if (!validEmail(email)) return { error: "El correo no tiene un formato válido." }
+  const emailError = validateEmail(email)
+  if (emailError) return { error: emailError }
   if (!ROLES.includes(role)) return { error: "Rol no válido." }
   if (id === admin.id && role !== "admin") {
     return { error: "No puedes quitarte tu propio rol de administrador." }

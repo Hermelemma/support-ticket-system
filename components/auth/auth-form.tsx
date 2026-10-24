@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input, Label } from "@/components/ui/field"
 import { PasswordInput } from "@/components/ui/password-input"
 import { PASSWORD_HINT } from "@/lib/security/password-policy"
+import { EMAIL_DOMAIN_HINT } from "@/lib/security/email-policy"
 import { loginAction, registerAction, type ActionState } from "@/lib/actions/auth"
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -31,14 +32,27 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       )}
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Correo electrónico</Label>
-        <Input id="email" name="email" type="email" placeholder="tucorreo@empresa.com" required autoComplete="email" />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          placeholder="tucorreo@empresa.com"
+          required
+          autoComplete="email"
+          aria-describedby={mode === "register" ? "email-hint" : undefined}
+        />
+        {mode === "register" && (
+          <p id="email-hint" className="text-xs text-muted-foreground">
+            {EMAIL_DOMAIN_HINT}
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">Contraseña</Label>
         <PasswordInput
           id="password"
           name="password"
-          placeholder={mode === "login" ? "••••••••" : "Ej. mi gato duerme en la ventana"}
+          placeholder={mode === "login" ? "••••••••" : "Mínimo 15 caracteres, sin espacios"}
           required
           autoComplete={mode === "login" ? "current-password" : "new-password"}
           aria-describedby={mode === "register" ? "password-hint" : undefined}

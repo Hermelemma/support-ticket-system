@@ -7,8 +7,9 @@
  *    como un carácter.
  *  - Longitud máxima permitida de al menos 64 caracteres (aquí: 128). Nunca se trunca.
  *  - SIN reglas de composición (no se exigen mayúsculas, números ni símbolos).
- *  - Se aceptan todos los caracteres ASCII imprimibles, el espacio y Unicode. Se
- *    normaliza a NFC antes de calcular el hash.
+ *  - Se aceptan los caracteres ASCII imprimibles y Unicode, y se normaliza a NFC antes
+ *    de calcular el hash. Excepción por política de la organización: no se permiten
+ *    espacios (NIST solo lo recomienda con "SHOULD", así que la norma lo admite).
  *  - Se compara la contraseña COMPLETA contra una lista de bloqueo de contraseñas
  *    comunes, esperables o comprometidas, y contra palabras del contexto (nombre
  *    del servicio, correo y nombre del usuario). Si coincide, se rechaza y se
@@ -22,8 +23,8 @@ export const PASSWORD_MAX_LENGTH = 128
 
 /** Texto de ayuda que se muestra junto a los campos de contraseña. */
 export const PASSWORD_HINT =
-  `Mínimo ${PASSWORD_MIN_LENGTH} caracteres. Te recomendamos una frase fácil de recordar ` +
-  `(por ejemplo, varias palabras con espacios). No se exigen mayúsculas, números ni símbolos.`
+  `Mínimo ${PASSWORD_MIN_LENGTH} caracteres y sin espacios. Te recomendamos unir varias palabras ` +
+  `fáciles de recordar. No se exigen mayúsculas, números ni símbolos.`
 
 /** Normaliza la contraseña a Unicode NFC (NIST SP 800-63B-4 §3.1.1.2). */
 export function normalizePassword(password: string): string {
@@ -133,10 +134,15 @@ export function validatePassword(password: string, ctx: PasswordContext = {}): s
   const length = Array.from(normalized).length
 
   if (length < PASSWORD_MIN_LENGTH) {
-    return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres (tiene ${length}). Una frase de varias palabras es una buena opción.`
+    return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres (tiene ${length}). Une varias palabras para formar una contraseña larga.`
   }
   if (length > PASSWORD_MAX_LENGTH) {
     return `La contraseña no puede superar ${PASSWORD_MAX_LENGTH} caracteres.`
+  }
+  // Regla de la organización (más estricta que NIST, que recomienda aceptar espacios):
+  // no se permiten espacios ni otros caracteres en blanco.
+  if (/\s/u.test(normalized)) {
+    return "La contraseña no puede contener espacios. Une las palabras sin dejar espacios entre ellas."
   }
   // Caracteres de control (no imprimibles) no son válidos.
   if (/[\u0000-\u001f\u007f]/.test(normalized)) {

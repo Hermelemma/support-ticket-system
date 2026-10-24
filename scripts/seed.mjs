@@ -3,8 +3,8 @@ import { randomUUID, randomBytes, scryptSync } from "node:crypto"
 
 const sql = neon(process.env.DATABASE_URL)
 
-// Contraseña de las cuentas demo: frase de 26 caracteres conforme a NIST SP 800-63B-4.
-export const DEMO_PASSWORD = "cafe con leche y pan dulce"
+// Contraseña de las cuentas demo: contraseña de 21 caracteres, sin espacios, conforme a NIST SP 800-63B-4.
+export const DEMO_PASSWORD = "CafeConLecheYPanDulce"
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex")

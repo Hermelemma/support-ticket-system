@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { sql, rowToUser, randomUUID } from "@/lib/db/sql"
 import { hashPassword, verifyPassword, signSession, verifySession } from "@/lib/crypto"
 import { validatePassword } from "@/lib/security/password-policy"
+import { validateEmail } from "@/lib/security/email-policy"
 import type { PublicUser, Role, User } from "@/lib/types"
 
 const COOKIE_NAME = "ticket_session"
@@ -124,8 +125,9 @@ export async function register(name: string, email: string, password: string, ro
   if (cleanName.length > 100) {
     return { ok: false, error: "El nombre no puede superar 100 caracteres." }
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-    return { ok: false, error: "El correo no tiene un formato válido." }
+  const emailError = validateEmail(normalized)
+  if (emailError) {
+    return { ok: false, error: emailError }
   }
   const passwordError = validatePassword(password, { email: normalized, name: cleanName })
   if (passwordError) {

@@ -1,16 +1,10 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Ticket, Info } from "lucide-react"
+import { Ticket } from "lucide-react"
 import { AuthForm } from "@/components/auth/auth-form"
 import { getCurrentUser } from "@/lib/auth/session"
 
 export const metadata = { title: "Ingresar · MesaViva" }
-
-const demoAccounts = [
-  { role: "Administrador", email: "admin@soporte.dev" },
-  { role: "Agente", email: "bruno@soporte.dev" },
-  { role: "Cliente", email: "diego@empresa.com" },
-]
 
 export default async function LoginPage() {
   if (await getCurrentUser()) redirect("/panel")
@@ -31,24 +25,6 @@ export default async function LoginPage() {
           <div className="mt-6">
             <AuthForm mode="login" />
           </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-border bg-card/60 p-4 text-sm">
-          <p className="flex items-center gap-2 font-medium text-foreground">
-            <Info className="size-4 text-primary" />
-            Cuentas de demostración
-          </p>
-          <ul className="mt-2 space-y-1 text-muted-foreground">
-            {demoAccounts.map((a) => (
-              <li key={a.email} className="flex justify-between gap-2">
-                <span>{a.role}</span>
-                <code className="text-xs">{a.email}</code>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Contraseña para todas: <code>cafe con leche y pan dulce</code>
-          </p>
         </div>
       </div>
     </div>

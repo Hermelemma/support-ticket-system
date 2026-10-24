@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Field, Label, Input, Select } from "@/components/ui/field"
 import { PasswordInput } from "@/components/ui/password-input"
 import { PASSWORD_HINT } from "@/lib/security/password-policy"
+import { EMAIL_DOMAIN_HINT } from "@/lib/security/email-policy"
 import { cn } from "@/lib/utils"
 import { ROLE_LABEL, ROLES, type PublicUser } from "@/lib/types"
 import {
@@ -258,6 +259,7 @@ function UserDialog({
               required
               autoComplete="off"
             />
+            <p className="text-xs text-muted-foreground">{EMAIL_DOMAIN_HINT}</p>
           </Field>
 
           <Field>
